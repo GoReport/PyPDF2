@@ -693,7 +693,15 @@ class PdfFileWriter(object):
 
         return bookmarkRef
 
-    def addBookmark(self, title, pagenum, parent=None, color=None, bold=False, italic=False, fit='/Fit', *args):
+    def indirectReferenceToPage(self, pagenum):
+        """
+        Gets a reference to the indicated page.
+
+        :param int pagenum: The page for which to get a reference.
+        """
+        return self.getObject(self._pages)['/Kids'][pagenum]
+
+    def addBookmark(self, title, pagenum,parent=None, color=None, bold=False, italic=False, fit='/Fit', *args):
         """
         Add a bookmark to this PDF file.
 
@@ -946,6 +954,54 @@ class PdfFileWriter(object):
         NameObject('/H'): NameObject('/I'),
         NameObject('/Border'): ArrayObject(borderArr),
         NameObject('/A'): lnk2
+        })
+        lnkRef = self._addObject(lnk)
+
+        if "/Annots" in pageRef:
+            pageRef['/Annots'].append(lnkRef)
+        else:
+            pageRef[NameObject('/Annots')] = ArrayObject([lnkRef])
+
+    def addLinkToDestination(self, destination, pagenum, rect, border=None):
+        """
+        Add an internal link from a rectangular area to the named destination.
+
+        :param string destination: name of the destination to link to.
+        :param int pagenum: page number on which to place the link.
+        :param rect: :class:`RectangleObject<PyPDF2.generic.RectangleObject>` or array of four
+            integers specifying the clickable rectangular area
+            ``[xLL, yLL, xUR, yUR]``, or string in the form ``"[ xLL yLL xUR yUR ]"``.
+        :param border: if provided, an array describing border-drawing
+            properties. See the PDF spec for details. No border will be
+            drawn if this argument is omitted.
+        """
+
+        pageLink = self.getObject(self._pages)['/Kids'][pagenum]
+        pageRef = self.getObject(pageLink)
+
+        if border is not None:
+            borderArr = [NameObject(n) for n in border[:3]]
+            if len(border) == 4:
+                dashPattern = ArrayObject([NameObject(n) for n in border[3]])
+                borderArr.append(dashPattern)
+        else:
+            borderArr = [NumberObject(0)] * 3
+
+        if isString(rect):
+            rect = NameObject(rect)
+        elif isinstance(rect, RectangleObject):
+            pass
+        else:
+            rect = RectangleObject(rect)
+
+        lnk = DictionaryObject()
+        lnk.update({
+            NameObject('/Type'): NameObject('/Annot'),
+            NameObject('/Subtype'): NameObject('/Link'),
+            NameObject('/P'): pageLink,
+            NameObject('/Rect'): rect,
+            NameObject('/Border'): ArrayObject(borderArr),
+            NameObject('/Dest'): TextStringObject(destination)
         })
         lnkRef = self._addObject(lnk)
 
